@@ -1,0 +1,82 @@
+<odoo>
+  <template id="blog_list_template" name="Blog Listing">
+    <t t-call="website.layout">
+      <div class="container o_blog_page">
+        <div class="row">
+          <div class="col-9">
+            <h1>Blog</h1>
+            <div class="o_blog_list">
+              <t t-if="posts">
+                <t t-foreach="posts" t-as="post">
+                  <div class="o_blog_item">
+                    <h2><a t-attf-href="/blog/#{post.id}"><t t-esc="post.title"/></a></h2>
+                    <div class="o_blog_meta">
+                      <span t-esc="post.date and post.date[:10] or ''"/>
+                      <t t-if="post.category_id">
+                        <span> - <a t-attf-href="/blog?category_id=#{post.category_id[0]}"><t t-esc="post.category_id[1]"/></a></span>
+                      </t>
+                    </div>
+                    <div class="o_blog_excerpt">
+                      <t t-raw="(post.content or '')[:300]"/> <t t-if="(post.content or '')|length &gt; 300">...</t>
+                    </div>
+                    <p><a t-attf-href="/blog/#{post.id}" class="btn btn-primary">Read more</a></p>
+                  </div>
+                </t>
+              </t>
+              <t t-else="">
+                <p>No posts found.</p>
+              </t>
+            </div>
+          </div>
+          <div class="col-3">
+            <div class="o_blog_sidebar">
+              <h4>Categories</h4>
+              <ul class="list-unstyled">
+                <t t-foreach="categories" t-as="cat">
+                  <li>
+                    <a t-attf-href="/blog?category_id=#{cat.id}">
+                      <t t-esc="cat.name"/>
+                    </a>
+                  </li>
+                </t>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </t>
+  </template>
+
+  <template id="blog_detail_template" name="Blog Detail">
+    <t t-call="website.layout">
+      <div class="container o_blog_detail">
+        <div class="row">
+          <div class="col-9">
+            <h1><t t-esc="post.title"/></h1>
+            <div class="o_blog_meta">
+              <span t-esc="post.date and post.date[:10] or ''"/>
+              <t t-if="post.category_id">
+                <span> - <a t-attf-href="/blog?category_id=#{post.category_id.id}"><t t-esc="post.category_id.name"/></a></span>
+              </t>
+            </div>
+            <div class="o_blog_content" t-raw="post.content"/>
+          </div>
+          <div class="col-3">
+            <div class="o_blog_sidebar">
+              <h4>Categories</h4>
+              <ul class="list-unstyled">
+                <t t-foreach="categories" t-as="cat">
+                  <li>
+                    <a t-attf-href="/blog?category_id=#{cat.id}">
+                      <t t-esc="cat.name"/>
+                    </a>
+                  </li>
+                </t>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </t>
+  </template>
+</odoo>

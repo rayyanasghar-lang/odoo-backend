@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .section {
+            margin: 30px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        h1 {
+            color: #714B67;
+            border-bottom: 3px solid #714B67;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #875A7B;
+            margin-top: 25px;
+        }
+        .feature-list {
+            list-style: none;
+            padding: 0;
+        }
+        .feature-list li {
+            padding: 10px 0;
+            border-bottom: 1px solid #ddd;
+        }
+        .feature-list li:before {
+            content: "✓ ";
+            color: #28a745;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        .highlight {
+            background: #fff3cd;
+            padding: 15px;
+            border-left: 4px solid #ffc107;
+            margin: 20px 0;
+        }
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+    </style>
+</head>
+<body>
+    <h1>Blog API - Complete Blogging Solution for Odoo</h1>
+    
+    <div class="section">
+        <h2>🚀 Overview</h2>
+        <p>
+            Transform your Odoo website into a powerful blogging platform! Blog API provides a complete 
+            blogging solution with an intuitive backend interface, beautiful frontend templates, and 
+            RESTful API endpoints for external integrations.
+        </p>
+    </div>
+
+    <div class="section">
+        <h2>✨ Key Features</h2>
+        <ul class="feature-list">
+            <li><strong>Blog Post Management</strong> - Create, edit, and publish blog posts with rich text content</li>
+            <li><strong>Category Organization</strong> - Organize your posts with categories for easy navigation</li>
+            <li><strong>Website Integration</strong> - Seamlessly integrated with Odoo's website builder</li>
+            <li><strong>RESTful API</strong> - HTTP endpoints for creating and managing posts programmatically</li>
+            <li><strong>Author Tracking</strong> - Automatic author assignment and metadata tracking</li>
+            <li><strong>Responsive Design</strong> - Mobile-friendly blog templates that look great on all devices</li>
+            <li><strong>SEO Friendly</strong> - Clean URLs and proper meta tags for better search engine visibility</li>
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>📋 How It Works</h2>
+        <h3>Backend Management</h3>
+        <ol>
+            <li>Navigate to <code>Website → Blog → Posts</code> in your Odoo backend</li>
+            <li>Create new blog posts with title, content, and category</li>
+            <li>Manage categories from <code>Website → Blog → Categories</code></li>
+            <li>Publish posts to make them visible on your website</li>
+        </ol>
+
+        <h3>Frontend Display</h3>
+        <p>
+            Your blog is automatically available at <code>/blog</code> on your website. 
+            Visitors can browse posts, filter by category, and read individual articles.
+        </p>
+
+        <h3>API Integration</h3>
+        <p>
+            Use the RESTful API endpoints to integrate with external applications:
+        </p>
+        <ul>
+            <li><code>GET /api/blog/posts</code> - Retrieve all posts</li>
+            <li><code>POST /api/blog/posts</code> - Create new posts</li>
+            <li><code>PUT /api/blog/posts/&lt;id&gt;</code> - Update existing posts</li>
+            <li><code>DELETE /api/blog/posts/&lt;id&gt;</code> - Remove posts</li>
+        </ul>
+    </div>
+
+    <div class="highlight">
+        <strong>💡 Perfect For:</strong> Companies wanting to add a blog to their Odoo website, 
+        content marketers, developers building headless CMS solutions, and anyone needing a 
+        simple yet powerful blogging platform integrated with Odoo.
+    </div>
+
+    <div class="section">
+        <h2>🔧 Installation</h2>
+        <ol>
+            <li>Install the module from the Apps menu</li>
+            <li>No additional configuration required</li>
+            <li>Start creating blog posts immediately</li>
+        </ol>
+    </div>
+
+    <div class="section">
+        <h2>📦 Requirements</h2>
+        <ul>
+            <li>Odoo 19.0 or higher</li>
+            <li>Website module (automatically installed)</li>
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>🆓 Pricing</h2>
+        <p>
+            This module is <strong>FREE</strong> and open source under the LGPL-3 license.
+        </p>
+    </div>
+
+    <div class="section">
+        <h2>📞 Support</h2>
+        <p>
+            For questions, bug reports, or feature requests, please visit our GitHub repository 
+            or contact us through the Odoo Apps store.
+        </p>
+    </div>
+</body>
+</html>

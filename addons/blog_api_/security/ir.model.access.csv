@@ -1,0 +1,5 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_blog_post_user,Blog Post User Access,blog_api.model_blog_post,base.group_user,1,1,1,1
+access_blog_category_user,Blog Category User Access,blog_api.model_blog_category,base.group_user,1,1,1,1
+access_blog_post_public,Blog Post Public Access,blog_api.model_blog_post,base.group_public,1,0,0,0
+access_blog_category_public,Blog Category Public Access,blog_api.model_blog_category,base.group_public,1,0,0,0
