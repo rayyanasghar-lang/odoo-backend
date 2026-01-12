@@ -1,0 +1,99 @@
+# Frontend Integration Guide: Bi-directional Chat
+
+This guide explains how to integrate the Odoo real-time chat into your React frontend.
+
+## 1. API Endpoints
+
+### Fetch Chat History (Polling)
+-   **URL**: `GET http://localhost:8069/api/project-updates/<PROJECT_UUID>`
+-   **Use Case**: Fetch existing messages and listen for new ones.
+-   **Response**:
+    ```json
+    {
+      "status": "success",
+      "data": {
+        "chat_logs": [
+          {
+            "id": 123,
+            "author": "OdooBot",
+            "body": "<p>Hello</p>",
+            "date": "2024-01-09 12:00:00",
+             "tracking": []
+          }
+        ]
+      }
+    }
+    ```
+
+### Send Message
+-   **URL**: `POST http://localhost:8069/api/project/<PROJECT_UUID>/message`
+-   **Use Case**: Send a message from the frontend to Odoo.
+-   **Body**:
+    ```json
+    {
+      "body": "Your message content here",
+      "author_name": "John Doe"
+    }
+    ```
+-   **Response**:
+    ```json
+    {
+      "status": "success",
+      "message": "Message sent successfully"
+    }
+    ```
+
+## 2. React Implementation Strategy
+
+### Polling for Updates
+Use a hook like `swr` or `react-query` to poll the updates endpoint every few seconds.
+
+```javascript
+// Example using SWR
+import useSWR from 'swr';
+
+const fetcher = (url) => fetch(url).then((res) => res.json());
+
+function ChatComponent({ projectUuid }) {
+  const { data, mutate } = useSWR(
+    `http://localhost:8069/api/project-updates/${projectUuid}`,
+    fetcher,
+    { refreshInterval: 5000 } // Poll every 5 seconds
+  );
+
+  const messages = data?.data?.chat_logs || [];
+  
+  // ... render messages
+}
+```
+
+### Sending Messages
+When the user submits a message:
+1.  Call the POST endpoint.
+2.  Optimistically update the UI (optional) or immediately re-fetch the data.
+
+```javascript
+const sendMessage = async (messageText) => {
+  try {
+    const response = await fetch(`http://localhost:8069/api/project/${projectUuid}/message`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        body: messageText,
+        author_name: 'Frontend User' // Or dynamic user name
+      })
+    });
+
+    if (response.ok) {
+      // Trigger a re-fetch of the messages to see the new one
+      mutate(); 
+    }
+  } catch (error) {
+    console.error("Failed to send message", error);
+  }
+};
+```
+
+## 3. Formatting
+-   **Odoo HTML**: Odoo stores messages as HTML. Ensure you render them safely using `dangerouslySetInnerHTML` or a library like `dompurify` to prevent XSS.
+-   **Stage Changes**: The `chat_logs` also contain stage changes in the `tracking` field. You can render these as system notifications (e.g., "Stage changed: New -> Done").
