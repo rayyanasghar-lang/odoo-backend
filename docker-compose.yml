@@ -14,7 +14,7 @@ services:
       - HOST=db
       - USER=odoo
       - PASSWORD=odoo_password
-    command: odoo -d odoo --db_user=odoo --db_password=odoo_password --db_host=db 
+    command: odoo  --db_user=odoo --db_password=odoo_password --db_host=db
   db:
     image: postgres:15
     environment:
