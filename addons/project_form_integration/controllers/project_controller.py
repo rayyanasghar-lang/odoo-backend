@@ -3,6 +3,7 @@ from odoo.http import request
 import json
 import re
 import logging
+from odoo.tools import html2plaintext
 
 _logger = logging.getLogger(__name__)
 
@@ -862,8 +863,10 @@ class ProjectController(http.Controller):
                     if is_closed:
                         completed_subtasks_count += 1
 
-                    # Get description safely
+                    # Get description safely and remove HTML formatting
                     description = child.description if hasattr(child, 'description') else ''
+                    if description:
+                        description = html2plaintext(description)
                     
                     subtasks_data.append({
                         'id': child.id,
@@ -916,7 +919,7 @@ class ProjectController(http.Controller):
                     'id': msg.id,
                     'date': str(msg.date),
                     'author': msg.author_id.name if msg.author_id else 'System',
-                    'body': msg.body, # HTML content
+                    'body': html2plaintext(msg.body) if msg.body else '', # Strip HTML content
                     'type': msg.message_type,
                     'subtype': msg.subtype_id.name if msg.subtype_id else 'Note',
                     'tracking': tracking_changes
@@ -1017,17 +1020,14 @@ class ProjectController(http.Controller):
 
             task = request.env['project.task'].sudo().browse(project.odoo_task_id)
             
-            # Prepare message
-            author_name = data.get('author_name', 'Client')
-            full_body = f"<p><strong>{author_name} (via Portal):</strong></p><p>{body}</p>"
+            # Prepare message - use raw body from frontend
+            full_body = body
 
             # Post message
             task.message_post(
                 body=full_body,
                 message_type='comment',
                 subtype_xmlid='mail.mt_comment',
-                # You could try to link to a partner here if you have one, 
-                # otherwise it will post as the Odoo Bot/System user but with our custom body.
             )
 
             headers = {'Content-Type': 'application/json'}

@@ -3,4 +3,4 @@ from . import submission_type_controller
 from . import service_controller
 from . import scraper_controller
 from . import engineering_firm_controller
-##test
+from . import auth_controller

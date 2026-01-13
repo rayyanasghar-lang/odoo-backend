@@ -12,5 +12,7 @@ from . import system_components
 from . import uploads
 from . import engineering_firm
 from . import project_task_inherit
+from . import contractor
+from . import contractor_license
 
 

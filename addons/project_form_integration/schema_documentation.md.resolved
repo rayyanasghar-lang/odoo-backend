@@ -1,0 +1,44 @@
+# Project Schema Documentation
+
+## Core Models
+
+### Project (`project.form.project`)
+Represents the main project entity.
+- **Fields**:
+    - `user_profile_id`: Char (Reference to User Profile)
+    - [name](file:///c:/Users/OK/Desktop/odoo/addons/blog_api_/models/blog_models.py#37-44): Char (Project Name)
+    - [address](file:///c:/Users/OK/Desktop/odoo/addons/project_form_integration/models/project_inherit.py#37-60): Char (Unique per project, unless linked to same contractor)
+    - `type`: Char
+    - `status`: Char
+    - `contractor_id`: Many2one (`project.form.contractor`)
+    - `submission_type_id`: Char (Reference to Submission Type)
+    - `service_ids`: Many2many (`project.form.service`)
+    - `created_at`, `updated_at`: Datetime
+
+### Contractor (`project.form.contractor`)
+Represents a contractor who can manage projects.
+- **Fields**:
+    - [name](file:///c:/Users/OK/Desktop/odoo/addons/blog_api_/models/blog_models.py#37-44): Char
+    - `company_name`: Char
+    - `email`: Char (Unique)
+    - `password`: Char
+    - [address](file:///c:/Users/OK/Desktop/odoo/addons/project_form_integration/models/project_inherit.py#37-60): Char
+    - `phone`: Char
+    - `logo_url`: Char
+
+## Related Models
+- `project.form.user.profile`: Customer/User information.
+- `project.form.submission.type`: Type of submission.
+- `project.form.service`: Services requested.
+- `project.form.system.summary`: Technical system details.
+- `project.form.site.detail`: Site specific details.
+- `project.form.electrical.detail`: Electrical configuration.
+- `project.form.advanced.electrical.detail`: detailed electrical info.
+- `project.form.optional.extra.detail`: Add-ons and extras.
+- `project.form.system.component`: Hardware components.
+- `project.form.upload`: File uploads.
+- `project.form.engineering.firm`: Associated engineering firm.
+
+## Constraints
+1. **Contractor Email**: Must be unique.
+2. **Project Address**: Must be unique across all projects, preventing different contractors from claiming the same site.
