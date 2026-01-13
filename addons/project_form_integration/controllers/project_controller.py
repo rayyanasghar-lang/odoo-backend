@@ -3,12 +3,319 @@ from odoo.http import request
 import json
 import re
 import logging
+import jwt
+import datetime
+from odoo.tools import config
 from odoo.tools import html2plaintext
 
 _logger = logging.getLogger(__name__)
+SECRET_KEY = config.get('jwt_secret')
 
 class ProjectController(http.Controller):
 
+    def _verify_token(self):
+        auth_header = request.httprequest.headers.get('Authorization')
+        if not auth_header:
+            return None
+        
+        try:
+            token = auth_header.split(" ")[1]
+            payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+            return payload.get('user_id')
+        except (jwt.ExpiredSignatureError, jwt.InvalidTokenError, IndexError):
+            return None
+
+    def _generate_project_description(self, project):
+        # Fetch related data
+        user_profile = request.env['project.form.user.profile'].sudo().search([('uuid', '=', project.user_profile_id)], limit=1)
+        submission_type = request.env['project.form.submission.type'].sudo().search([('uuid', '=', project.submission_type_id)], limit=1)
+        
+        sys_sum = request.env['project.form.system.summary'].sudo().search([('project_id', '=', project.uuid)], limit=1)
+        site = request.env['project.form.site.detail'].sudo().search([('project_id', '=', project.uuid)], limit=1)
+        elec = request.env['project.form.electrical.detail'].sudo().search([('project_id', '=', project.uuid)], limit=1)
+        adv_elec = request.env['project.form.advanced.electrical.detail'].sudo().search([('project_id', '=', project.uuid)], limit=1)
+        opt_extra = request.env['project.form.optional.extra.detail'].sudo().search([('project_id', '=', project.uuid)], limit=1)
+        components = request.env['project.form.system.component'].sudo().search([('project_id', '=', project.uuid)])
+        uploads = request.env['project.form.upload'].sudo().search([('project_id', '=', project.uuid)])
+
+        html_description = f"""
+<div style="font-family: Arial, sans-serif; font-size: 14px;">
+    <h2 style="color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px;">
+        🏗️ {project.name or 'N/A'}
+    </h2>
+    
+    <div style="background-color: #ecf0f1; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+        <h3 style="color: #2980b9; margin-top: 0;">📋 Project Details</h3>
+        <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+                <td style="padding: 8px; font-weight: bold; width: 30%;">Address:</td>
+                <td style="padding: 8px;">{project.address or 'N/A'}</td>
+            </tr>
+            <tr style="background-color: #fff;">
+                <td style="padding: 8px; font-weight: bold;">Type:</td>
+                <td style="padding: 8px;"><span style="background-color: #3498db; color: white; padding: 3px 10px; border-radius: 3px;">{(project.type or 'unknown').upper()}</span></td>
+            </tr>
+            <tr>
+                <td style="padding: 8px; font-weight: bold;">Submission Type:</td>
+                <td style="padding: 8px;">{submission_type.name if submission_type else 'N/A'}</td>
+            </tr>
+            <tr style="background-color: #fff;">
+                <td style="padding: 8px; font-weight: bold;">General Notes:</td>
+                <td style="padding: 8px;"><em>{project.general_notes or 'None'}</em></td>
+            </tr>
+        </table>
+    </div>
+"""
+
+        if user_profile:
+            html_description += f"""
+    <div style="background-color: #e8f5e9; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+        <h3 style="color: #27ae60; margin-top: 0;">👤 Customer Information</h3>
+        <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+                <td style="padding: 8px; font-weight: bold; width: 30%;">Company:</td>
+                <td style="padding: 8px;">{user_profile.company_name or 'N/A'}</td>
+            </tr>
+            <tr style="background-color: #fff;">
+                <td style="padding: 8px; font-weight: bold;">Contact:</td>
+                <td style="padding: 8px;">{user_profile.contact_name or 'N/A'}</td>
+            </tr>
+            <tr>
+                <td style="padding: 8px; font-weight: bold;">Email:</td>
+                <td style="padding: 8px;"><a href="mailto:{user_profile.email}">{user_profile.email or 'N/A'}</a></td>
+            </tr>
+            <tr style="background-color: #fff;">
+                <td style="padding: 8px; font-weight: bold;">Phone:</td>
+                <td style="padding: 8px;">{user_profile.phone or 'N/A'}</td>
+            </tr>
+        </table>
+    </div>
+"""
+
+        # Services
+        html_description += """
+    <div style="background-color: #fff3e0; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+        <h3 style="color: #f39c12; margin-top: 0;">🔧 Services Requested</h3>
+        <ul style="list-style-type: none; padding-left: 0;">
+"""
+        if project.service_ids:
+            for service in project.service_ids:
+                html_description += f'<li style="padding: 5px 0;">✓ <strong>{service.name}</strong></li>'
+        else:
+            html_description += '<li style="padding: 5px 0;"><em>No services specified</em></li>'
+        html_description += "</ul></div>"
+
+        # System Summary
+        if sys_sum:
+            html_description += f"""
+    <div style="background-color: #fce4ec; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+        <h3 style="color: #e91e63; margin-top: 0;">⚡ System Summary</h3>
+        <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+                <td style="padding: 8px; font-weight: bold; width: 30%;">System Size:</td>
+                <td style="padding: 8px;"><strong style="color: #e91e63; font-size: 16px;">{sys_sum.system_size} kW</strong></td>
+            </tr>
+            <tr style="background-color: #fff;">
+                <td style="padding: 8px; font-weight: bold;">System Type:</td>
+                <td style="padding: 8px;">{dict(sys_sum._fields['system_type'].selection).get(sys_sum.system_type) if sys_sum.system_type else 'N/A'}</td>
+            </tr>
+            <tr>
+                <td style="padding: 8px; font-weight: bold;">PV Modules:</td>
+                <td style="padding: 8px;">{sys_sum.pv_modules or 'N/A'}</td>
+            </tr>
+            <tr style="background-color: #fff;">
+                <td style="padding: 8px; font-weight: bold;">Inverters:</td>
+                <td style="padding: 8px;">{sys_sum.inverters or 'N/A'}</td>
+            </tr>
+        </table>
+"""
+            # Battery Info
+            batt = request.env['project.form.battery.info'].sudo().search([('system_summary_id', '=', sys_sum.uuid)], limit=1)
+            if batt:
+                html_description += f"""
+        <div style="margin-top: 15px; padding: 10px; background-color: #fff; border-left: 4px solid #9c27b0;">
+            <strong style="color: #9c27b0;">🔋 Battery:</strong> {batt.qty}x {batt.model}
+        </div>
+"""
+            html_description += "</div>"
+
+        # Site Details
+        if site:
+             html_description += f"""
+    <div style="background-color: #e3f2fd; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+        <h3 style="color: #1976d2; margin-top: 0;">🏠 Site Details</h3>
+        <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+                <td style="padding: 8px; font-weight: bold; width: 30%;">Roof Material:</td>
+                <td style="padding: 8px;">{site.roof_material or 'N/A'}</td>
+            </tr>
+            <tr style="background-color: #fff;">
+                <td style="padding: 8px; font-weight: bold;">Roof Pitch:</td>
+                <td style="padding: 8px;">{site.roof_pitch or 'N/A'}</td>
+            </tr>
+            <tr>
+                <td style="padding: 8px; font-weight: bold;">Number of Arrays:</td>
+                <td style="padding: 8px;">{site.number_of_arrays or 0}</td>
+            </tr>
+            <tr style="background-color: #fff;">
+                <td style="padding: 8px; font-weight: bold;">Utility Provider:</td>
+                <td style="padding: 8px;">{site.utility_provider or 'N/A'}</td>
+            </tr>
+            <tr>
+                <td style="padding: 8px; font-weight: bold;">Jurisdiction:</td>
+                <td style="padding: 8px;">{site.jurisdiction or 'N/A'}</td>
+            </tr>
+        </table>
+    </div>
+"""
+
+        # Electrical Details
+        if elec:
+            html_description += f"""
+    <div style="background-color: #fff9c4; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+        <h3 style="color: #f57c00; margin-top: 0;">⚙️ Electrical Details</h3>
+        <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+                <td style="padding: 8px; font-weight: bold; width: 30%;">Main Panel Size:</td>
+                <td style="padding: 8px;">{elec.main_panel_size or 'N/A'}</td>
+            </tr>
+            <tr style="background-color: #fff;">
+                <td style="padding: 8px; font-weight: bold;">Bus Rating:</td>
+                <td style="padding: 8px;">{elec.bus_rating or 'N/A'}</td>
+            </tr>
+            <tr>
+                <td style="padding: 8px; font-weight: bold;">Main Breaker:</td>
+                <td style="padding: 8px;">{elec.main_breaker or 'N/A'}</td>
+            </tr>
+            <tr style="background-color: #fff;">
+                <td style="padding: 8px; font-weight: bold;">PV Breaker Location:</td>
+                <td style="padding: 8px;">{dict(elec._fields['pv_breaker_location'].selection).get(elec.pv_breaker_location) if elec.pv_breaker_location else 'N/A'}</td>
+            </tr>
+        </table>
+    </div>
+"""
+
+        # Advanced Electrical Details
+        if adv_elec:
+             html_description += f"""
+    <div style="background-color: #f3e5f5; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+        <h3 style="color: #7b1fa2; margin-top: 0;">🔌 Advanced Electrical Details</h3>
+        <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+                <td style="padding: 8px; font-weight: bold; width: 30%;">Meter Location:</td>
+                <td style="padding: 8px;">{adv_elec.meter_location or 'N/A'}</td>
+            </tr>
+            <tr style="background-color: #fff;">
+                <td style="padding: 8px; font-weight: bold;">Service Entrance Type:</td>
+                <td style="padding: 8px;">{adv_elec.service_entrance_type or 'N/A'}</td>
+            </tr>
+            <tr>
+                <td style="padding: 8px; font-weight: bold;">Subpanel Details:</td>
+                <td style="padding: 8px;">{adv_elec.subpanel_details or 'N/A'}</td>
+            </tr>
+        </table>
+    </div>
+"""
+
+        # Optional Extra Details
+        if opt_extra:
+            extras_list = []
+            if opt_extra.miracle_watt_required:
+                extras_list.append(f"<li>✓ <strong>Miracle Watt Required:</strong> {opt_extra.miracle_watt_notes or 'Yes'}</li>")
+            if opt_extra.der_rlc_required:
+                extras_list.append(f"<li>✓ <strong>DER RLC Required:</strong> {opt_extra.der_rlc_notes or 'Yes'}</li>")
+            if opt_extra.setback_constraints:
+                extras_list.append(f"<li>⚠️ <strong>Setback Constraints:</strong> {opt_extra.setback_notes or 'Yes'}</li>")
+            if opt_extra.site_access_restrictions:
+                extras_list.append(f"<li>⚠️ <strong>Site Access Restrictions:</strong> {opt_extra.site_access_notes or 'Yes'}</li>")
+            if opt_extra.inspection_notes:
+                extras_list.append(f"<li>📝 <strong>Inspection Notes:</strong> {opt_extra.inspection_notes_text or 'Yes'}</li>")
+            if opt_extra.battery_sld_requested:
+                extras_list.append(f"<li>✓ <strong>Battery SLD Requested:</strong> {opt_extra.battery_sld_notes or 'Yes'}</li>")
+            
+            if extras_list:
+                html_description += f"""
+    <div style="background-color: #ffe0b2; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+        <h3 style="color: #e65100; margin-top: 0;">📌 Optional Extra Details</h3>
+        <ul style="list-style-type: none; padding-left: 0;">
+            {''.join(extras_list)}
+        </ul>
+    </div>
+"""
+
+        # System Components
+        if components:
+            html_description += f"""
+    <div style="background-color: #e0f2f1; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+        <h3 style="color: #00695c; margin-top: 0;">🔩 System Components ({len(components)})</h3>
+        <table style="width: 100%; border-collapse: collapse; border: 1px solid #ddd;">
+            <thead>
+                <tr style="background-color: #00695c; color: white;">
+                    <th style="padding: 10px; text-align: left;">Type</th>
+                    <th style="padding: 10px; text-align: left;">Make/Model</th>
+                    <th style="padding: 10px; text-align: center;">Qty</th>
+                    <th style="padding: 10px; text-align: left;">Notes</th>
+                </tr>
+            </thead>
+            <tbody>
+"""
+            for comp in components:
+                html_description += f"""
+                <tr style="border-bottom: 1px solid #ddd;">
+                    <td style="padding: 8px;">{comp.type or 'N/A'}</td>
+                    <td style="padding: 8px;"><strong>{comp.make_model or 'N/A'}</strong></td>
+                    <td style="padding: 8px; text-align: center;">{comp.qty or 0}</td>
+                    <td style="padding: 8px;"><em>{comp.notes or '-'}</em></td>
+                </tr>
+"""
+            html_description += "</tbody></table></div>"
+
+        # Uploads
+        if uploads:
+            html_description += f"""
+    <div style="background-color: #fafafa; padding: 15px; border-radius: 5px; margin-bottom: 20px; border: 2px dashed #9e9e9e;">
+        <h3 style="color: #424242; margin-top: 0;">📎 Uploaded Files ({len(uploads)})</h3>
+        <ul style="list-style-type: none; padding-left: 0;">
+"""
+            for upload in uploads:
+                is_image = False
+                if upload.mime_type and upload.mime_type.startswith('image/'):
+                    is_image = True
+                elif upload.name and upload.name.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
+                    is_image = True
+                
+                image_url = upload.url
+                if is_image and 'drive.google.com' in upload.url:
+                    match = re.search(r'/d/([a-zA-Z0-9_-]+)', upload.url)
+                    if match:
+                        file_id = match.group(1)
+                        image_url = f'https://drive.google.com/uc?export=view&id={file_id}'
+                    else:
+                        match = re.search(r'id=([a-zA-Z0-9_-]+)', upload.url)
+                        if match:
+                            file_id = match.group(1)
+                            image_url = f'https://drive.google.com/uc?export=view&id={file_id}'
+
+                html_description += f"""
+            <li style="padding: 8px 0; border-bottom: 1px solid #eee;">
+                <a href="{upload.url}" target="_blank" style="color: #1976d2; text-decoration: none; font-weight: bold;">
+                    📄 {upload.name}
+                </a>
+                <span style="background-color: #e0e0e0; padding: 2px 8px; border-radius: 3px; margin-left: 10px; font-size: 12px;">
+                    {upload.category or 'General'}
+                </span>
+"""
+                if is_image:
+                     html_description += f"""
+                <div style="margin-top: 10px;">
+                    <img src="{image_url}" alt="{upload.name}" style="max-width: 100%; max-height: 400px; border-radius: 5px; border: 1px solid #ddd;">
+                </div>
+"""
+                html_description += "</li>"
+            html_description += "</ul></div>"
+
+        html_description += "</div>"
+        return html_description
 
     @http.route('/api/create-project', type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False, cors='*')
     def create_project(self, **kwargs):
@@ -133,6 +440,8 @@ class ProjectController(http.Controller):
                     else:
                         _logger.warning("Service with name '%s' not found", service_data.get('name'))
 
+        contractor_id = data.get('contractor_id')
+
         try:
             # 4. Create Project
             # Resolve service UUIDs to Integer IDs for the Many2many write
@@ -140,8 +449,8 @@ class ProjectController(http.Controller):
             if service_ids:
                 services = request.env['project.form.service'].sudo().search([('uuid', 'in', service_ids)])
                 service_int_ids = services.ids
-
-            project = request.env['project.form.project'].sudo().create({
+            
+            project_vals = {
                 'name': project_data.get('name'),
                 'user_profile_id': user_profile.uuid,
                 'address': project_data.get('address'),
@@ -149,7 +458,12 @@ class ProjectController(http.Controller):
                 'submission_type_id': submission_type_id,
                 'general_notes': project_data.get('general_notes'),
                 'service_ids': [(6, 0, service_int_ids)] if service_int_ids else False,
-            })
+            }
+            
+            if contractor_id:
+                project_vals['contractor_id'] = contractor_id
+
+            project = request.env['project.form.project'].sudo().create(project_vals)
         except Exception as e:
             _logger.exception("Failed to create project")
             error_response = json.dumps({
@@ -386,320 +700,7 @@ class ProjectController(http.Controller):
             _logger.info("Calculated priority: %s", priority)
             
             # ===== 3. BUILD RICH HTML DESCRIPTION =====
-            html_description = f"""
-<div style="font-family: Arial, sans-serif; font-size: 14px;">
-    <h2 style="color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px;">
-        🏗️ {project.name}
-    </h2>
-    
-    <div style="background-color: #ecf0f1; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
-        <h3 style="color: #2980b9; margin-top: 0;">📋 Project Details</h3>
-        <table style="width: 100%; border-collapse: collapse;">
-            <tr>
-                <td style="padding: 8px; font-weight: bold; width: 30%;">Address:</td>
-                <td style="padding: 8px;">{project.address}</td>
-            </tr>
-            <tr style="background-color: #fff;">
-                <td style="padding: 8px; font-weight: bold;">Type:</td>
-                <td style="padding: 8px;"><span style="background-color: #3498db; color: white; padding: 3px 10px; border-radius: 3px;">{project.type.upper()}</span></td>
-            </tr>
-            <tr>
-                <td style="padding: 8px; font-weight: bold;">Submission Type:</td>
-                <td style="padding: 8px;">{submission_type.name if submission_type else 'N/A'}</td>
-            </tr>
-            <tr style="background-color: #fff;">
-                <td style="padding: 8px; font-weight: bold;">General Notes:</td>
-                <td style="padding: 8px;"><em>{project.general_notes or 'None'}</em></td>
-            </tr>
-        </table>
-    </div>
-    
-    <div style="background-color: #e8f5e9; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
-        <h3 style="color: #27ae60; margin-top: 0;">👤 Customer Information</h3>
-        <table style="width: 100%; border-collapse: collapse;">
-            <tr>
-                <td style="padding: 8px; font-weight: bold; width: 30%;">Company:</td>
-                <td style="padding: 8px;">{user_profile.company_name}</td>
-            </tr>
-            <tr style="background-color: #fff;">
-                <td style="padding: 8px; font-weight: bold;">Contact:</td>
-                <td style="padding: 8px;">{user_profile.contact_name}</td>
-            </tr>
-            <tr>
-                <td style="padding: 8px; font-weight: bold;">Email:</td>
-                <td style="padding: 8px;"><a href="mailto:{user_profile.email}">{user_profile.email}</a></td>
-            </tr>
-            <tr style="background-color: #fff;">
-                <td style="padding: 8px; font-weight: bold;">Phone:</td>
-                <td style="padding: 8px;">{user_profile.phone}</td>
-            </tr>
-        </table>
-    </div>
-    
-    <div style="background-color: #fff3e0; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
-        <h3 style="color: #f39c12; margin-top: 0;">🔧 Services Requested</h3>
-        <ul style="list-style-type: none; padding-left: 0;">
-"""
-            
-            if service_ids:
-                services = request.env['project.form.service'].sudo().search([('uuid', 'in', service_ids)])
-                for service in services:
-                    html_description += f'<li style="padding: 5px 0;">✓ <strong>{service.name}</strong></li>'
-            else:
-                html_description += '<li style="padding: 5px 0;"><em>No services specified</em></li>'
-            
-            html_description += """
-        </ul>
-    </div>
-"""
-            
-            # System Summary Section
-            if system_summary_id:
-                sys_sum = request.env['project.form.system.summary'].sudo().search([('uuid', '=', system_summary_id)], limit=1)
-                if sys_sum:
-                    html_description += f"""
-    <div style="background-color: #fce4ec; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
-        <h3 style="color: #e91e63; margin-top: 0;">⚡ System Summary</h3>
-        <table style="width: 100%; border-collapse: collapse;">
-            <tr>
-                <td style="padding: 8px; font-weight: bold; width: 30%;">System Size:</td>
-                <td style="padding: 8px;"><strong style="color: #e91e63; font-size: 16px;">{sys_sum.system_size} kW</strong></td>
-            </tr>
-            <tr style="background-color: #fff;">
-                <td style="padding: 8px; font-weight: bold;">System Type:</td>
-                <td style="padding: 8px;">{sys_sum.system_type or 'N/A'}</td>
-            </tr>
-            <tr>
-                <td style="padding: 8px; font-weight: bold;">PV Modules:</td>
-                <td style="padding: 8px;">{sys_sum.pv_modules or 'N/A'}</td>
-            </tr>
-            <tr style="background-color: #fff;">
-                <td style="padding: 8px; font-weight: bold;">Inverters:</td>
-                <td style="padding: 8px;">{sys_sum.inverters or 'N/A'}</td>
-            </tr>
-        </table>
-"""
-                    
-                    # Battery Info
-                    if battery_info_id:
-                        batt = request.env['project.form.battery.info'].sudo().search([('uuid', '=', battery_info_id)], limit=1)
-                        if batt:
-                            html_description += f"""
-        <div style="margin-top: 15px; padding: 10px; background-color: #fff; border-left: 4px solid #9c27b0;">
-            <strong style="color: #9c27b0;">🔋 Battery:</strong> {batt.qty}x {batt.model}
-        </div>
-"""
-                    
-                    html_description += """
-    </div>
-"""
-            
-            # Site Details Section
-            if site_details_id:
-                site = request.env['project.form.site.detail'].sudo().search([('uuid', '=', site_details_id)], limit=1)
-                if site:
-                    html_description += f"""
-    <div style="background-color: #e3f2fd; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
-        <h3 style="color: #1976d2; margin-top: 0;">🏠 Site Details</h3>
-        <table style="width: 100%; border-collapse: collapse;">
-            <tr>
-                <td style="padding: 8px; font-weight: bold; width: 30%;">Roof Material:</td>
-                <td style="padding: 8px;">{site.roof_material or 'N/A'}</td>
-            </tr>
-            <tr style="background-color: #fff;">
-                <td style="padding: 8px; font-weight: bold;">Roof Pitch:</td>
-                <td style="padding: 8px;">{site.roof_pitch or 'N/A'}</td>
-            </tr>
-            <tr>
-                <td style="padding: 8px; font-weight: bold;">Number of Arrays:</td>
-                <td style="padding: 8px;">{site.number_of_arrays or 0}</td>
-            </tr>
-            <tr style="background-color: #fff;">
-                <td style="padding: 8px; font-weight: bold;">Utility Provider:</td>
-                <td style="padding: 8px;">{site.utility_provider or 'N/A'}</td>
-            </tr>
-            <tr>
-                <td style="padding: 8px; font-weight: bold;">Jurisdiction:</td>
-                <td style="padding: 8px;">{site.jurisdiction or 'N/A'}</td>
-            </tr>
-        </table>
-    </div>
-"""
-            
-            # Electrical Details Section
-            if electrical_details_id:
-                elec = request.env['project.form.electrical.detail'].sudo().search([('uuid', '=', electrical_details_id)], limit=1)
-                if elec:
-                    html_description += f"""
-    <div style="background-color: #fff9c4; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
-        <h3 style="color: #f57c00; margin-top: 0;">⚙️ Electrical Details</h3>
-        <table style="width: 100%; border-collapse: collapse;">
-            <tr>
-                <td style="padding: 8px; font-weight: bold; width: 30%;">Main Panel Size:</td>
-                <td style="padding: 8px;">{elec.main_panel_size or 'N/A'}</td>
-            </tr>
-            <tr style="background-color: #fff;">
-                <td style="padding: 8px; font-weight: bold;">Bus Rating:</td>
-                <td style="padding: 8px;">{elec.bus_rating or 'N/A'}</td>
-            </tr>
-            <tr>
-                <td style="padding: 8px; font-weight: bold;">Main Breaker:</td>
-                <td style="padding: 8px;">{elec.main_breaker or 'N/A'}</td>
-            </tr>
-            <tr style="background-color: #fff;">
-                <td style="padding: 8px; font-weight: bold;">PV Breaker Location:</td>
-                <td style="padding: 8px;">{elec.pv_breaker_location or 'N/A'}</td>
-            </tr>
-        </table>
-    </div>
-"""
-            
-            # Advanced Electrical Details Section
-            if advanced_electrical_details_id:
-                adv_elec = request.env['project.form.advanced.electrical.detail'].sudo().search([('uuid', '=', advanced_electrical_details_id)], limit=1)
-                if adv_elec:
-                    html_description += f"""
-    <div style="background-color: #f3e5f5; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
-        <h3 style="color: #7b1fa2; margin-top: 0;">🔌 Advanced Electrical Details</h3>
-        <table style="width: 100%; border-collapse: collapse;">
-            <tr>
-                <td style="padding: 8px; font-weight: bold; width: 30%;">Meter Location:</td>
-                <td style="padding: 8px;">{adv_elec.meter_location or 'N/A'}</td>
-            </tr>
-            <tr style="background-color: #fff;">
-                <td style="padding: 8px; font-weight: bold;">Service Entrance Type:</td>
-                <td style="padding: 8px;">{adv_elec.service_entrance_type or 'N/A'}</td>
-            </tr>
-            <tr>
-                <td style="padding: 8px; font-weight: bold;">Subpanel Details:</td>
-                <td style="padding: 8px;">{adv_elec.subpanel_details or 'N/A'}</td>
-            </tr>
-        </table>
-    </div>
-"""
-            
-            # Optional Extra Details Section
-            if optional_extra_details_id:
-                opt_extra = request.env['project.form.optional.extra.detail'].sudo().search([('uuid', '=', optional_extra_details_id)], limit=1)
-                if opt_extra:
-                    extras_list = []
-                    if opt_extra.miracle_watt_required:
-                        extras_list.append(f"<li>✓ <strong>Miracle Watt Required:</strong> {opt_extra.miracle_watt_notes or 'Yes'}</li>")
-                    if opt_extra.der_rlc_required:
-                        extras_list.append(f"<li>✓ <strong>DER RLC Required:</strong> {opt_extra.der_rlc_notes or 'Yes'}</li>")
-                    if opt_extra.setback_constraints:
-                        extras_list.append(f"<li>⚠️ <strong>Setback Constraints:</strong> {opt_extra.setback_notes or 'Yes'}</li>")
-                    if opt_extra.site_access_restrictions:
-                        extras_list.append(f"<li>⚠️ <strong>Site Access Restrictions:</strong> {opt_extra.site_access_notes or 'Yes'}</li>")
-                    if opt_extra.inspection_notes:
-                        extras_list.append(f"<li>📝 <strong>Inspection Notes:</strong> {opt_extra.inspection_notes_text or 'Yes'}</li>")
-                    if opt_extra.battery_sld_requested:
-                        extras_list.append(f"<li>✓ <strong>Battery SLD Requested:</strong> {opt_extra.battery_sld_notes or 'Yes'}</li>")
-                    
-                    if extras_list:
-                        html_description += f"""
-    <div style="background-color: #ffe0b2; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
-        <h3 style="color: #e65100; margin-top: 0;">📌 Optional Extra Details</h3>
-        <ul style="list-style-type: none; padding-left: 0;">
-            {''.join(extras_list)}
-        </ul>
-    </div>
-"""
-            
-            # System Components Section
-            if system_component_ids:
-                html_description += f"""
-    <div style="background-color: #e0f2f1; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
-        <h3 style="color: #00695c; margin-top: 0;">🔩 System Components ({len(system_component_ids)})</h3>
-        <table style="width: 100%; border-collapse: collapse; border: 1px solid #ddd;">
-            <thead>
-                <tr style="background-color: #00695c; color: white;">
-                    <th style="padding: 10px; text-align: left;">Type</th>
-                    <th style="padding: 10px; text-align: left;">Make/Model</th>
-                    <th style="padding: 10px; text-align: center;">Qty</th>
-                    <th style="padding: 10px; text-align: left;">Notes</th>
-                </tr>
-            </thead>
-            <tbody>
-"""
-                
-                for comp_uuid in system_component_ids:
-                    comp = request.env['project.form.system.component'].sudo().search([('uuid', '=', comp_uuid)], limit=1)
-                    if comp:
-                        html_description += f"""
-                <tr style="border-bottom: 1px solid #ddd;">
-                    <td style="padding: 8px;">{comp.type or 'N/A'}</td>
-                    <td style="padding: 8px;"><strong>{comp.make_model or 'N/A'}</strong></td>
-                    <td style="padding: 8px; text-align: center;">{comp.qty or 0}</td>
-                    <td style="padding: 8px;"><em>{comp.notes or '-'}</em></td>
-                </tr>
-"""
-                
-                html_description += """
-            </tbody>
-        </table>
-    </div>
-"""
-            
-            # Uploads Section
-            if upload_ids:
-                html_description += f"""
-    <div style="background-color: #fafafa; padding: 15px; border-radius: 5px; margin-bottom: 20px; border: 2px dashed #9e9e9e;">
-        <h3 style="color: #424242; margin-top: 0;">📎 Uploaded Files ({len(upload_ids)})</h3>
-        <ul style="list-style-type: none; padding-left: 0;">
-"""
-                
-                for upload_uuid in upload_ids:
-                    upload = request.env['project.form.upload'].sudo().search([('uuid', '=', upload_uuid)], limit=1)
-                    if upload:
-                        # Check if image
-                        is_image = False
-                        if upload.mime_type and upload.mime_type.startswith('image/'):
-                            is_image = True
-                        elif upload.name and upload.name.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
-                            is_image = True
-                        
-                        image_url = upload.url
-                        if is_image and 'drive.google.com' in upload.url:
-                            # Extract ID and convert to direct link
-                            # Patterns: /file/d/ID/view, id=ID
-                            match = re.search(r'/d/([a-zA-Z0-9_-]+)', upload.url)
-                            if match:
-                                file_id = match.group(1)
-                                image_url = f'https://drive.google.com/uc?export=view&id={file_id}'
-                            else:
-                                match = re.search(r'id=([a-zA-Z0-9_-]+)', upload.url)
-                                if match:
-                                    file_id = match.group(1)
-                                    image_url = f'https://drive.google.com/uc?export=view&id={file_id}'
-
-                        html_description += f"""
-            <li style="padding: 8px 0; border-bottom: 1px solid #eee;">
-                <a href="{upload.url}" target="_blank" style="color: #1976d2; text-decoration: none; font-weight: bold;">
-                    📄 {upload.name}
-                </a>
-                <span style="background-color: #e0e0e0; padding: 2px 8px; border-radius: 3px; margin-left: 10px; font-size: 12px;">
-                    {upload.category or 'General'}
-                </span>
-"""
-                        if is_image:
-                             html_description += f"""
-                <div style="margin-top: 10px;">
-                    <img src="{image_url}" alt="{upload.name}" style="max-width: 100%; max-height: 400px; border-radius: 5px; border: 1px solid #ddd;">
-                </div>
-"""
-                        html_description += """
-            </li>
-"""
-                
-                html_description += """
-        </ul>
-    </div>
-"""
-            
-            html_description += """
-</div>
-"""
+            html_description = self._generate_project_description(project)
             
             _logger.info("Generated HTML description with %d characters", len(html_description))
             
@@ -779,6 +780,7 @@ class ProjectController(http.Controller):
             'system_component_ids': system_component_ids,
             'upload_ids': upload_ids,
             'odoo_task_id': odoo_task_id,
+            'contractor_id': project.contractor_id.id if project.contractor_id else None,
         })
         
         return request.make_response(
@@ -790,6 +792,8 @@ class ProjectController(http.Controller):
                 'Access-Control-Allow-Headers': 'Content-Type, Authorization',
             }
         )
+
+
 
 
 
@@ -975,7 +979,7 @@ class ProjectController(http.Controller):
                 headers=headers,
                 status=500
             )
-
+### http://localhost:8069/api/project/<string:project_uuid>/message
     @http.route('/api/project/<string:project_uuid>/message', type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False, cors='*')
     def post_project_message(self, project_uuid, **kwargs):
         cors_headers = {
@@ -1050,7 +1054,7 @@ class ProjectController(http.Controller):
                 status=500
             )
 
-
+### http://localhost:8069/api/delete-all
     @http.route('/api/delete-all', type='http', auth='public', methods=['DELETE', 'OPTIONS'], csrf=False, cors='*')
     def delete_all_projects(self, **kwargs):
         if request.httprequest.method == 'OPTIONS':
@@ -1112,6 +1116,7 @@ class ProjectController(http.Controller):
                 status=500
             )
 
+### http://localhost:8069/api/projects/<string:project_id>
     @http.route('/api/projects/<string:project_id>', type='http', auth='public', methods=['DELETE', 'OPTIONS'], csrf=False, cors='*')
     def delete_project(self, project_id, **kwargs):
         if request.httprequest.method == 'OPTIONS':
@@ -1211,6 +1216,7 @@ class ProjectController(http.Controller):
                 },
                 status=500
             )
+### http://localhost:8069/api/projects/update
     @http.route('/api/projects/update', type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False, cors='*')
     def update_project(self, **kwargs):
         if request.httprequest.method == 'OPTIONS':
@@ -1421,6 +1427,17 @@ class ProjectController(http.Controller):
                         'notes': comp_data.get('notes'),
                     })
 
+            # Update Odoo Task Description to reflect changes
+            try:
+                if project.odoo_task_id:
+                    task = request.env['project.task'].sudo().browse(project.odoo_task_id)
+                    if task.exists():
+                        new_description = self._generate_project_description(project)
+                        task.write({'description': new_description})
+                        _logger.info("Sync'd Odoo task description for task %s", project.odoo_task_id)
+            except Exception as e:
+                _logger.error("Failed to sync Odoo task description on update: %s", str(e))
+
             return request.make_response(
                 json.dumps({
                     'status': 'success',
@@ -1430,13 +1447,15 @@ class ProjectController(http.Controller):
                 headers={'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'}
             )
         except Exception as e:
-            _logger.exception("Failed to update project")
+            request.env.cr.rollback()
+            _logger.exception("Failed to create project")
             return request.make_response(
                 json.dumps({'status': 'error', 'message': str(e)}),
                 headers={'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
                 status=500
             )
 
+### http://localhost:8069/api/projects
     @http.route('/api/projects', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False, cors='*')
     def get_projects(self, **kwargs):
         if request.httprequest.method == 'OPTIONS':
@@ -1450,7 +1469,20 @@ class ProjectController(http.Controller):
             )
 
         try:
-            projects = request.env['project.form.project'].sudo().search([])
+            domain = []
+            # Check for Authorization header
+            auth_header = request.httprequest.headers.get('Authorization')
+            if auth_header:
+                contractor_id = self._verify_token()
+                if not contractor_id:
+                     return request.make_response(
+                        json.dumps({'status': 'error', 'message': 'Unauthorized request. Invalid or expired token.'}),
+                        headers={'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                        status=401
+                    )
+                domain.append(('contractor_id', '=', contractor_id))
+
+            projects = request.env['project.form.project'].sudo().search(domain)
             
             # Optimization: Prefetch all linked task stages to avoid N+1 queries
             task_ids = [p.odoo_task_id for p in projects if p.odoo_task_id]
@@ -1625,6 +1657,7 @@ class ProjectController(http.Controller):
                     'optional_extra_details': opt_extra_data,
                     'system_components': components_data,
                     'uploads': uploads_data,
+                    'contractor_id': project.contractor_id.id if project.contractor_id else None,
                 })
             
             return request.make_response(
@@ -1645,7 +1678,7 @@ class ProjectController(http.Controller):
                 status=500
             )
 
-
+### http://localhost:8069/api/projects/<string:project_uuid>
     @http.route('/api/projects/<string:project_uuid>', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False, cors='*')
     def get_project_by_id(self, project_uuid, **kwargs):
         if request.httprequest.method == 'OPTIONS':
@@ -1835,6 +1868,7 @@ class ProjectController(http.Controller):
                 'optional_extra_details': opt_extra_data,
                 'system_components': components_data,
                 'uploads': uploads_data,
+                'contractor_id': project.contractor_id.id if project.contractor_id else None,
             }
 
             return request.make_response(

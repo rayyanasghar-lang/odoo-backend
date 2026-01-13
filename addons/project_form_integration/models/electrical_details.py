@@ -13,11 +13,11 @@ class ElectricalDetail(models.Model):
     bus_rating = fields.Char()
     main_breaker = fields.Char()
     pv_breaker_location = fields.Selection([
-        ('TOP', 'Top'),
-        ('BOTTOM', 'Bottom'),
-        ('CENTER', 'Center'),
-        ('OPPOSITE', 'Opposite'),
-        ('UNKNOWN', 'Unknown')
+        ('top', 'Top'),
+        ('bottom', 'Bottom'),
+        ('center', 'Center'),
+        ('opposite', 'Opposite'),
+        ('unknown', 'Unknown')
     ], string='PV Breaker Location')
     one_line_diagram = fields.Text(string='One Line Diagram (JSON array)')
 

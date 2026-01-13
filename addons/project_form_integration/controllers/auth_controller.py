@@ -21,6 +21,71 @@ class AuthController(http.Controller):
         }
         return jwt.encode(payload, SECRET_KEY, algorithm='HS256')
 
+    def _verify_token(self):
+        auth_header = request.httprequest.headers.get('Authorization')
+        if not auth_header:
+            return None
+        
+        try:
+            token = auth_header.split(" ")[1]
+            payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+            return payload.get('user_id')
+        except (jwt.ExpiredSignatureError, jwt.InvalidTokenError, IndexError):
+            return None
+
+    @http.route('/api/contractor/profile', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False, cors='*')
+    def contractor_profile(self, **kwargs):
+        if request.httprequest.method == 'OPTIONS':
+             return request.make_response(
+                json.dumps({'status': 'ok'}),
+                headers={
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+                    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+                }
+            )
+
+        contractor_id = self._verify_token()
+        if not contractor_id:
+             return request.make_response(
+                json.dumps({'status': 'error', 'message': 'Unauthorized request. Invalid or missing token.'}),
+                headers={'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                status=401
+            )
+            
+        contractor = request.env['project.form.contractor'].sudo().browse(contractor_id)
+        if not contractor.exists():
+             return request.make_response(
+                json.dumps({'status': 'error', 'message': 'Contractor not found'}),
+                headers={'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                status=404
+            )
+            
+        licenses = []
+        for lic in contractor.license_ids:
+            licenses.append({
+                'license_no': lic.license_no,
+                'license_type': lic.license_type,
+                'state': lic.state,
+            })
+
+        return request.make_response(
+            json.dumps({
+                'status': 'success',
+                'contractor': {
+                    'id': contractor.id,
+                    'name': contractor.name,
+                    'email': contractor.email,
+                    'company_name': contractor.company_name,
+                    'address': contractor.address,
+                    'phone': contractor.phone,
+                    'logo_url': contractor.logo_url,
+                    'licenses': licenses
+                }
+            }),
+            headers={'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'}
+        )
+
 ## http://localhost:8069/api/contractor/signup
     @http.route('/api/contractor/signup', type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False, cors='*')
     def contractor_signup(self, **kwargs):

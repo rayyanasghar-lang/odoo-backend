@@ -1,4 +1,5 @@
 from odoo import models, fields, api
+from odoo.exceptions import ValidationError
 import uuid
 
 
@@ -56,5 +57,5 @@ class Project(models.Model):
                      # The requirement specifically mentions contractor context:
                      # "if other project is created by a contractor with an address that is already here then donot allow it"
                      # So if I am a contractor and I try to use an address that is already in the system (by anyone), block it.
-                     raise models.ValidationError("The address '%s' is already associated with another project." % audit.address)
+                     raise ValidationError("The address '%s' is already associated with another project." % audit.address)
 
